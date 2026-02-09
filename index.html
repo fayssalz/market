@@ -297,7 +297,7 @@
         if (!baseSpotPrice) return;
 
         // Calculate USD Bid/Ask with 10.36% spread
-        const spreadFactor = 0.1036;
+        const spreadFactor = 0.05;
         const halfSpread = spreadFactor / 2;
         let bid = baseSpotPrice * (1 - halfSpread);
         let ask = baseSpotPrice * (1 + halfSpread);
