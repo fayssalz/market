@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XAG/USD Converter & Spread Calculator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            color: #333;
+        }
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 480px;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-top: 0;
+            font-size: 1.5rem;
+        }
+        .api-status {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            background: #f8f9fa;
+            padding: 0.5rem;
+            border-radius: 8px;
+        }
+        
+        /* Price Inputs Grid */
+        .price-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .price-box {
+            display: flex;
+            flex-direction: column;
+        }
+        .price-box label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #555;
+            margin-bottom: 0.4rem;
+            text-transform: uppercase;
+        }
+        .price-box input {
+            padding: 0.6rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #2c3e50;
+            width: 100%;;
+        }
+        .price-box input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        /* Spread Display */
+        .spread-display {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            padding: 0.75rem;
+            background: #e8f4fd;
+            color: #0c5460;
+            border-radius: 8px;
+            font-weight: bold;
+            border: 1px solid #bee5eb;
+        }
+
+        /* Converter Section */
+        .converter-section {
+            border-top: 2px solid #f1f1f1;
+            padding-top: 1.5rem;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 1.5rem;
+            background: #f1f1f1;
+            border-radius: 8px;
+            padding: 4px;
+        }
+        .tab {
+            flex: 1;
+            padding: 0.6rem;
+            text-align: center;
+            cursor: pointer;
+            font-weight: 600;
+            color: #666;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            background: white;
+            color: #3498db;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .input-group {
+            margin-bottom: 1rem;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 0.8rem;
+            box-sizing: border-box;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            font-size: 1.2rem;
+        }
+        .input-group input:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+
+        .result-box {
+            background: #27ae60;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-top: 1rem;
+            box-shadow: 0 4px 6px rgba(39, 174, 96, 0.2);
+        }
+
+        button#refreshBtn {
+            width: 100%;
+            padding: 1rem;
+            background: #34495e;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 1.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        button#refreshBtn:hover {
+            background: #2c3e50;
+        }
+        
+        .input-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        .input-row span {
+            font-weight: bold;
+            font-size: 0.8rem;
+            width: 35px;
+        }
+        .dual-result {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>XAG / USD Converter</h1>
+    
+    <div class="api-status" id="status">Initializing...</div>
+
+    <!-- Market Data Section -->
+    <div class="price-grid">
+        <div class="price-box">
+            <label for="bidPrice">Bid (Sell Price)</label>
+            <div class="input-row">
+                <span>USD</span>
+                <input type="number" id="bidPriceUSD" step="0.01" oninput="syncRates('USD')">
+            </div>
+            <div class="input-row">
+                <span>AED</span>
+                <input type="number" id="bidPriceAED" step="0.01" oninput="syncRates('AED')">
+            </div>
+        </div>
+        <div class="price-box">
+            <label for="askPrice">Ask (Buy Price)</label>
+            <div class="input-row">
+                <span>USD</span>
+                <input type="number" id="askPriceUSD" step="0.01" oninput="syncRates('USD')">
+            </div>
+            <div class="input-row">
+                <span>AED</span>
+                <input type="number" id="askPriceAED" step="0.01" oninput="syncRates('AED')">
+            </div>
+        </div>
+    </div>
+
+    <div class="spread-display" id="spreadOutput">
+        Spread: 0.00%
+    </div>
+
+    <!-- Converter Section -->
+    <div class="converter-section">
+        <div class="tabs">
+            <div class="tab active" onclick="setMode('buy')" id="tabBuy">Buy XAG</div>
+            <div class="tab" onclick="setMode('sell')" id="tabSell">Sell XAG</div>
+        </div>
+
+        <!-- Buy View: USD -> XAG -->
+        <div id="buySection">
+            <div class="input-group">
+                <label>Amount to Spend</label>
+                <div class="input-row">
+                    <span>USD</span>
+                    <input type="number" id="usdInput" placeholder="0.00" oninput="convert('USD')">
+                </div>
+                <div class="input-row">
+                    <span>AED</span>
+                    <input type="number" id="aedInput" placeholder="0.00" oninput="convert('AED')">
+                </div>
+            </div>
+            <div class="result-box" id="xagResult">0.000 oz</div>
+        </div>
+
+        <!-- Sell View: XAG -> USD -->
+        <div id="sellSection" style="display:none;">
+            <div class="input-group">
+                <label>Amount to Sell (XAG oz)</label>
+                <input type="number" id="xagInput" placeholder="0.000" oninput="convert()">
+            </div>
+            <div class="dual-result">
+                <div class="result-box" id="usdResult">$0.00</div>
+                <div class="result-box" id="aedResult">AED 0.00</div>
+            </div>
+        </div>
+    </div>
+
+    <button id="refreshBtn" onclick="fetchData()">Refresh Live Rates</button>
+</div>
+
+<script>
+    let currentMode = 'buy';
+    let baseSpotPrice = 0;
+    const rateSell = 3.653;
+    const rateBuy = 3.687;
+    const apiUrl = 'https://data-asg.goldprice.org/dbXRates/USD';
+
+    async function fetchData() {
+        const statusEl = document.getElementById('status');
+        statusEl.textContent = 'Fetching latest rates...';
+        
+        try {
+            const response = await fetch(apiUrl);
+            if (!response.ok) throw new Error('Network response was not ok');
+            
+            const data = await response.json();
+            
+            // The API returns an items array. xagPrice is the Silver Spot Price.
+            if (data.items && data.items.length > 0) {
+                const item = data.items[0];
+                baseSpotPrice = item.xagPrice;
+                
+                initPrices();
+                
+                const time = new Date().toLocaleTimeString();
+                statusEl.textContent = `Rates updated at ${time}`;
+                
+                calculateSpread();
+            } else {
+                throw new Error('Invalid data format');
+            }
+        } catch (error) {
+            console.error(error);
+            statusEl.textContent = 'Failed to load. Check internet or CORS settings.';
+        }
+    }
+
+    function initPrices() {
+        if (!baseSpotPrice) return;
+
+        // Calculate USD Bid/Ask with 10.36% spread
+        const spreadFactor = 0.1036;
+        const halfSpread = spreadFactor / 2;
+        let bid = baseSpotPrice * (1 - halfSpread);
+        let ask = baseSpotPrice * (1 + halfSpread);
+
+        document.getElementById('bidPriceUSD').value = bid.toFixed(2);
+        document.getElementById('askPriceUSD').value = ask.toFixed(2);
+        
+        syncRates('USD');
+    }
+
+    function syncRates(source) {
+        const bidUSD = document.getElementById('bidPriceUSD');
+        const bidAED = document.getElementById('bidPriceAED');
+        const askUSD = document.getElementById('askPriceUSD');
+        const askAED = document.getElementById('askPriceAED');
+
+        if (source === 'USD') {
+            bidAED.value = (parseFloat(bidUSD.value || 0) * rateSell).toFixed(2);
+            askAED.value = (parseFloat(askUSD.value || 0) * rateBuy).toFixed(2);
+        } else {
+            bidUSD.value = (parseFloat(bidAED.value || 0) / rateSell).toFixed(2);
+            askUSD.value = (parseFloat(askAED.value || 0) / rateBuy).toFixed(2);
+        }
+        calculateSpread();
+    }
+
+    function calculateSpread() {
+        const bid = parseFloat(document.getElementById('bidPriceUSD').value) || 0;
+        const ask = parseFloat(document.getElementById('askPriceUSD').value) || 0;
+        
+        if (ask > 0) {
+            // Spread Value
+            const spreadVal = ask - bid;
+            // Spread Percentage = ((Ask - Bid) / Ask) * 100
+            const spreadPercent = (spreadVal / ask) * 100;
+            
+            document.getElementById('spreadOutput').textContent = 
+                `Spread: $${spreadVal.toFixed(2)} (${spreadPercent.toFixed(2)}%)`;
+        } else {
+            document.getElementById('spreadOutput').textContent = 'Spread: 0.00%';
+        }
+        
+        // Recalculate conversion whenever prices change
+        convert();
+    }
+
+    function setMode(mode) {
+        currentMode = mode;
+        
+        // Toggle Tabs
+        document.getElementById('tabBuy').className = mode === 'buy' ? 'tab active' : 'tab';
+        document.getElementById('tabSell').className = mode === 'sell' ? 'tab active' : 'tab';
+        
+        // Toggle Sections
+        document.getElementById('buySection').style.display = mode === 'buy' ? 'block' : 'none';
+        document.getElementById('sellSection').style.display = mode === 'sell' ? 'block' : 'none';
+        
+        // Reset inputs for clarity
+        document.getElementById('usdInput').value = '';
+        document.getElementById('aedInput').value = '';
+        document.getElementById('xagInput').value = '';
+        document.getElementById('xagResult').textContent = '0.000 oz';
+        document.getElementById('usdResult').textContent = '$0.00';
+        document.getElementById('aedResult').textContent = 'AED 0.00';
+    }
+
+    function convert(sourceCurrency) {
+        const bidUSD = parseFloat(document.getElementById('bidPriceUSD').value) || 0;
+        const askUSD = parseFloat(document.getElementById('askPriceUSD').value) || 0;
+        const bidAED = parseFloat(document.getElementById('bidPriceAED').value) || 0;
+        const askAED = parseFloat(document.getElementById('askPriceAED').value) || 0;
+
+        if (currentMode === 'buy') {
+            // Buying XAG: You pay USD, Dealer sells at ASK price.
+            let usd = 0;
+            if (sourceCurrency === 'AED') {
+                const aed = parseFloat(document.getElementById('aedInput').value) || 0;
+                usd = aed / rateBuy;
+                document.getElementById('usdInput').value = usd.toFixed(2);
+            } else {
+                usd = parseFloat(document.getElementById('usdInput').value) || 0;
+                document.getElementById('aedInput').value = (usd * rateBuy).toFixed(2);
+            }
+
+            if (askUSD > 0) {
+                const xag = usd / askUSD;
+                document.getElementById('xagResult').textContent = `${xag.toFixed(4)} oz`;
+            } else {
+                document.getElementById('xagResult').textContent = '0.000 oz';
+            }
+        } else {
+            // Selling XAG: You give XAG, Dealer buys at BID price.
+            // Formula: XAG * Bid
+            const xag = parseFloat(document.getElementById('xagInput').value) || 0;
+            const usd = xag * bidUSD;
+            const aed = xag * bidAED;
+            document.getElementById('usdResult').textContent = `$${usd.toFixed(2)}`;
+            document.getElementById('aedResult').textContent = `AED ${aed.toFixed(2)}`;
+        }
+    }
+
+    // Load data on startup
+    fetchData();
+</script>
+
+</body>
+</html>
