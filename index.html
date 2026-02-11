@@ -210,6 +210,7 @@
     <h1>Gold & Silver Converter</h1>
     
     <div class="api-status" id="status">Initializing...</div>
+    <div class="api-status" id="spotPriceDisplay" style="margin-top: -1rem; margin-bottom: 1.5rem; font-weight: bold;">Spot Price: Loading...</div>
 
     <!-- Metal Selection Tabs -->
     <div class="tabs">
@@ -241,6 +242,11 @@
                 <input type="number" id="askPriceAED" step="0.01" oninput="syncRates('AED')">
             </div>
         </div>
+    </div>
+
+    <div class="input-group" style="margin-bottom: 0.5rem;">
+        <label for="spreadInput" style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase;">Adjustable Spread (%)</label>
+        <input type="number" id="spreadInput" value="5.0" step="0.1" oninput="initPrices()" style="width: 100%; padding: 0.6rem; box-sizing: border-box; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem;">
     </div>
 
     <div class="spread-display" id="spreadOutput">
@@ -283,7 +289,27 @@
         </div>
     </div>
 
-    <button id="refreshBtn" onclick="location.reload()">Refresh Page</button>
+    <!-- Profit Calculator Section -->
+    <div class="converter-section">
+        <h2 style="text-align: center; font-size: 1.2rem; margin-bottom: 1rem;">Profit Calculator</h2>
+        <div class="input-group">
+            <label>My Buy Price (per oz)</label>
+            <div class="input-row">
+                <select id="profitCurrency" onchange="calculateProfit()" style="width: 80px; padding: 0.6rem; border: 1px solid #ddd; border-radius: 6px; background: #f8f9fa; font-weight: bold; cursor: pointer;">
+                    <option value="USD">USD</option>
+                    <option value="AED">AED</option>
+                </select>
+                <input type="number" id="userBuyPrice" placeholder="0.00" oninput="calculateProfit()">
+            </div>
+        </div>
+        <div class="input-group">
+            <label>My Amount (<span class="metal-symbol">XAG</span> oz)</label>
+            <input type="number" id="userAmount" placeholder="0.000" step="any" oninput="calculateProfit()">
+        </div>
+        <div class="result-box" id="profitResult" style="background-color: #3498db;">Profit: $0.00</div>
+    </div>
+
+    <button id="refreshBtn" onclick="location.reload()">Refresh Page & Rates</button>
 </div>
 
 <script>
@@ -369,17 +395,25 @@
 
     function initPrices() {
         const spotPrice = prices[currentMetal];
-        if (!spotPrice) return;
+        
+        const spotPriceEl = document.getElementById('spotPriceDisplay');
+        if (spotPrice) {
+            spotPriceEl.textContent = `Spot Price (${currentMetal}): $${spotPrice.toFixed(2)}`;
+        } else {
+            spotPriceEl.textContent = `Spot Price (${currentMetal}): Loading...`;
+            return;
+        }
 
-        // Calculate USD Bid/Ask with 10.36% spread
-        const spreadFactor = 0.05;
+        // Calculate USD Bid/Ask with adjustable spread
+        const spreadPercent = parseFloat(document.getElementById('spreadInput').value) || 0;
+        const spreadFactor = spreadPercent / 100;
         const halfSpread = spreadFactor / 2;
         let bid = spotPrice * (1 - halfSpread);
         let ask = spotPrice * (1 + halfSpread);
 
         document.getElementById('bidPriceUSD').value = bid.toFixed(2);
         document.getElementById('askPriceUSD').value = ask.toFixed(2);
-        
+
         syncRates('USD');
     }
 
@@ -401,9 +435,12 @@
         document.getElementById('metalResult').textContent = '0.000 oz';
         document.getElementById('usdResult').textContent = '$0.00';
         document.getElementById('aedResult').textContent = 'AED 0.00';
+        document.getElementById('userBuyPrice').value = '';
+        document.getElementById('userAmount').value = '';
 
         // Refresh Prices
         initPrices();
+        calculateProfit();
     }
 
     function syncRates(source) {
@@ -440,6 +477,41 @@
         
         // Recalculate conversion whenever prices change
         convert();
+        calculateProfit();
+    }
+
+    function calculateProfit() {
+        const userBuyPrice = parseFloat(document.getElementById('userBuyPrice').value) || 0;
+        const userAmount = parseFloat(document.getElementById('userAmount').value) || 0;
+        const currency = document.getElementById('profitCurrency').value;
+        
+        let currentBid = 0;
+        let currencySymbol = '$';
+
+        if (currency === 'USD') {
+            currentBid = parseFloat(document.getElementById('bidPriceUSD').value) || 0;
+            currencySymbol = '$';
+        } else {
+            currentBid = parseFloat(document.getElementById('bidPriceAED').value) || 0;
+            currencySymbol = 'AED ';
+        }
+
+        const profitResultEl = document.getElementById('profitResult');
+
+        if (userBuyPrice > 0 && userAmount > 0 && currentBid > 0) {
+            const profit = (currentBid - userBuyPrice) * userAmount;
+            
+            profitResultEl.textContent = `Profit: ${currencySymbol}${profit.toFixed(2)}`;
+            
+            if (profit >= 0) {
+                profitResultEl.style.backgroundColor = '#27ae60'; // Green for profit
+            } else {
+                profitResultEl.style.backgroundColor = '#e74c3c'; // Red for loss
+            }
+        } else {
+            profitResultEl.textContent = `Profit: ${currencySymbol}0.00`;
+            profitResultEl.style.backgroundColor = '#3498db'; // Neutral blue
+        }
     }
 
     function setMode(mode) {
