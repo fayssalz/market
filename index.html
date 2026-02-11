@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XAG/USD Converter & Spread Calculator</title>
+    <title>Gold & Silver Converter (Live)</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -112,6 +113,29 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
+        /* Main Metal Tabs */
+        .main-tabs {
+            display: flex;
+            margin-bottom: 1rem;
+            justify-content: center;
+            gap: 1rem;
+        }
+        .main-tab-btn {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            background: #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #555;
+            transition: all 0.2s;
+        }
+        .main-tab-btn.active {
+            background: #2c3e50;
+            color: white;
+            box-shadow: 0 4px 10px rgba(44, 62, 80, 0.3);
+        }
+
         .input-group {
             margin-bottom: 1rem;
         }
@@ -183,9 +207,15 @@
 <body>
 
 <div class="card">
-    <h1>XAG / USD Converter</h1>
+    <h1>Gold & Silver Converter</h1>
     
     <div class="api-status" id="status">Initializing...</div>
+
+    <!-- Metal Selection Tabs -->
+    <div class="tabs">
+        <div class="tab active" onclick="setMetal('XAG')" id="tabMetalXAG">Silver (XAG)</div>
+        <div class="tab" onclick="setMetal('XAU')" id="tabMetalXAU">Gold (XAU)</div>
+    </div>
 
     <!-- Market Data Section -->
     <div class="price-grid">
@@ -220,11 +250,11 @@
     <!-- Converter Section -->
     <div class="converter-section">
         <div class="tabs">
-            <div class="tab active" onclick="setMode('buy')" id="tabBuy">Buy XAG</div>
-            <div class="tab" onclick="setMode('sell')" id="tabSell">Sell XAG</div>
+            <div class="tab active" onclick="setMode('buy')" id="tabBuy">Buy <span class="metal-symbol">XAG</span></div>
+            <div class="tab" onclick="setMode('sell')" id="tabSell">Sell <span class="metal-symbol">XAG</span></div>
         </div>
 
-        <!-- Buy View: USD -> XAG -->
+        <!-- Buy View: USD -> Metal -->
         <div id="buySection">
             <div class="input-group">
                 <label>Amount to Spend</label>
@@ -237,14 +267,14 @@
                     <input type="number" id="aedInput" placeholder="0.00" oninput="convert('AED')">
                 </div>
             </div>
-            <div class="result-box" id="xagResult">0.000 oz</div>
+            <div class="result-box" id="metalResult">0.000 oz</div>
         </div>
 
-        <!-- Sell View: XAG -> USD -->
+        <!-- Sell View: Metal -> USD -->
         <div id="sellSection" style="display:none;">
             <div class="input-group">
-                <label>Amount to Sell (XAG oz)</label>
-                <input type="number" id="xagInput" placeholder="0.000" oninput="convert()">
+                <label>Amount to Sell (<span class="metal-symbol">XAG</span> oz)</label>
+                <input type="number" id="metalInput" placeholder="0.000" oninput="convert()">
             </div>
             <div class="dual-result">
                 <div class="result-box" id="usdResult">$0.00</div>
@@ -253,59 +283,127 @@
         </div>
     </div>
 
-    <button id="refreshBtn" onclick="fetchData()">Refresh Live Rates</button>
+    <button id="refreshBtn" onclick="location.reload()">Refresh Page</button>
 </div>
 
 <script>
     let currentMode = 'buy';
-    let baseSpotPrice = 0;
-    const rateSell = 3.653;
-    const rateBuy = 3.687;
-    const apiUrl = 'https://data-asg.goldprice.org/dbXRates/USD';
+    let currentMetal = 'XAG';
+    let prices = { XAG: 0, XAU: 0 };
+    
+    // Default rates (will be updated by API)
+    let rateSell = 3.653; // Bank Buys USD (We Sell)
+    let rateBuy = 3.687;  // Bank Sells USD (We Buy)
 
-    async function fetchData() {
-        const statusEl = document.getElementById('status');
-        statusEl.textContent = 'Fetching latest rates...';
-        
+    // 1. Fetch Emirates NBD Rates for USD/AED
+    async function getBankRates() {
+        const url = "https://www.emiratesnbd.com/enbdapi/v1/currency/getexchangerates";
+        const params = new URLSearchParams();
+        params.append("SettingsId", "6947f6ab-b182-4b6e-953a-a3b15c6bfac8");
+        params.append("Language", "en");
+
         try {
-            const response = await fetch(apiUrl);
-            if (!response.ok) throw new Error('Network response was not ok');
-            
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: params
+            });
             const data = await response.json();
+            const ratesList = data.CurrencyList;
+            const usd = ratesList.find(r => r.CurrencyCode === 'USD');
             
-            // The API returns an items array. xagPrice is the Silver Spot Price.
-            if (data.items && data.items.length > 0) {
-                const item = data.items[0];
-                baseSpotPrice = item.xagPrice;
-                
-                initPrices();
-                
-                const time = new Date().toLocaleTimeString();
-                statusEl.textContent = `Rates updated at ${time}`;
-                
-                calculateSpread();
-            } else {
-                throw new Error('Invalid data format');
+            if (usd) {
+                // Update global rates
+                rateSell = parseFloat(usd.CustomerBuy);  // Bank Buys USD
+                rateBuy = parseFloat(usd.CustomerSell); // Bank Sells USD
+                console.log("Updated Bank Rates:", rateSell, rateBuy);
+                syncRates('USD'); // Refresh calculations
             }
-        } catch (error) {
-            console.error(error);
-            statusEl.textContent = 'Failed to load. Check internet or CORS settings.';
+        } catch (e) {
+            console.error("Error fetching bank rates:", e);
         }
     }
 
+    // 2. WebSocket for Live Metal Prices
+    function initSocket() {
+        const statusEl = document.getElementById('status');
+        statusEl.textContent = 'Connecting to live feed...';
+
+        const socket = io("wss://www.livepriceofgold.com", {
+            path: "/sio/p7012/socket.io/",
+            transports: ["websocket"]
+        });
+
+        socket.on('connect', () => {
+            statusEl.textContent = 'Live Feed Connected';
+            statusEl.style.color = '#27ae60';
+        });
+
+        socket.on('update', (data) => {
+            let jsonString = data;
+            if (Array.isArray(data) && data.length > 0) jsonString = data[0];
+
+            try {
+                const ratesObj = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
+                if (!ratesObj) return;
+
+                // Update prices
+                if (ratesObj.XAGUSD) prices.XAG = parseFloat(ratesObj.XAGUSD);
+                if (ratesObj.XAUUSD) prices.XAU = parseFloat(ratesObj.XAUUSD);
+
+                // Refresh UI
+                initPrices();
+                
+                const time = new Date().toLocaleTimeString();
+                statusEl.textContent = `Live Rates updated at ${time}`;
+            } catch (e) {
+                console.error("Error processing update:", e);
+            }
+        });
+
+        socket.on('disconnect', () => {
+            statusEl.textContent = 'Disconnected from live feed';
+            statusEl.style.color = '#c0392b';
+        });
+    }
+
     function initPrices() {
-        if (!baseSpotPrice) return;
+        const spotPrice = prices[currentMetal];
+        if (!spotPrice) return;
 
         // Calculate USD Bid/Ask with 10.36% spread
         const spreadFactor = 0.05;
         const halfSpread = spreadFactor / 2;
-        let bid = baseSpotPrice * (1 - halfSpread);
-        let ask = baseSpotPrice * (1 + halfSpread);
+        let bid = spotPrice * (1 - halfSpread);
+        let ask = spotPrice * (1 + halfSpread);
 
         document.getElementById('bidPriceUSD').value = bid.toFixed(2);
         document.getElementById('askPriceUSD').value = ask.toFixed(2);
         
         syncRates('USD');
+    }
+
+    function setMetal(metal) {
+        currentMetal = metal;
+        
+        // Update Tabs
+        document.getElementById('tabMetalXAG').className = metal === 'XAG' ? 'tab active' : 'tab';
+        document.getElementById('tabMetalXAU').className = metal === 'XAU' ? 'tab active' : 'tab';
+
+        // Update Labels
+        const symbols = document.querySelectorAll('.metal-symbol');
+        symbols.forEach(el => el.textContent = metal);
+
+        // Clear Inputs
+        document.getElementById('usdInput').value = '';
+        document.getElementById('aedInput').value = '';
+        document.getElementById('metalInput').value = '';
+        document.getElementById('metalResult').textContent = '0.000 oz';
+        document.getElementById('usdResult').textContent = '$0.00';
+        document.getElementById('aedResult').textContent = 'AED 0.00';
+
+        // Refresh Prices
+        initPrices();
     }
 
     function syncRates(source) {
@@ -358,8 +456,8 @@
         // Reset inputs for clarity
         document.getElementById('usdInput').value = '';
         document.getElementById('aedInput').value = '';
-        document.getElementById('xagInput').value = '';
-        document.getElementById('xagResult').textContent = '0.000 oz';
+        document.getElementById('metalInput').value = '';
+        document.getElementById('metalResult').textContent = '0.000 oz';
         document.getElementById('usdResult').textContent = '$0.00';
         document.getElementById('aedResult').textContent = 'AED 0.00';
     }
@@ -371,7 +469,7 @@
         const askAED = parseFloat(document.getElementById('askPriceAED').value) || 0;
 
         if (currentMode === 'buy') {
-            // Buying XAG: You pay USD, Dealer sells at ASK price.
+            // Buying Metal: You pay USD, Dealer sells at ASK price.
             let usd = 0;
             if (sourceCurrency === 'AED') {
                 const aed = parseFloat(document.getElementById('aedInput').value) || 0;
@@ -383,24 +481,25 @@
             }
 
             if (askUSD > 0) {
-                const xag = usd / askUSD;
-                document.getElementById('xagResult').textContent = `${xag.toFixed(4)} oz`;
+                const qty = usd / askUSD;
+                document.getElementById('metalResult').textContent = `${qty.toFixed(4)} oz`;
             } else {
-                document.getElementById('xagResult').textContent = '0.000 oz';
+                document.getElementById('metalResult').textContent = '0.000 oz';
             }
         } else {
-            // Selling XAG: You give XAG, Dealer buys at BID price.
-            // Formula: XAG * Bid
-            const xag = parseFloat(document.getElementById('xagInput').value) || 0;
-            const usd = xag * bidUSD;
-            const aed = xag * bidAED;
+            // Selling Metal: You give Metal, Dealer buys at BID price.
+            // Formula: Qty * Bid
+            const qty = parseFloat(document.getElementById('metalInput').value) || 0;
+            const usd = qty * bidUSD;
+            const aed = qty * bidAED;
             document.getElementById('usdResult').textContent = `$${usd.toFixed(2)}`;
             document.getElementById('aedResult').textContent = `AED ${aed.toFixed(2)}`;
         }
     }
 
     // Load data on startup
-    fetchData();
+    getBankRates();
+    initSocket();
 </script>
 
 </body>
